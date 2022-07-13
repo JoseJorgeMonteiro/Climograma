@@ -1,0 +1,200 @@
+---
+title: "Climograma de Piracicaba"
+author: "JJMJ"
+date: "02/07/2022"
+output: html_document
+---
+
+## Dinâmica Climática  - Piracicaba
+Este arquivo permite que você gere com dados Abertos, do Posto Metereológico de Piracicaba-SP; base de dados da estação automática da Escola Superior de Agricultura "Luiz de Queiroz"  - Departamento de Engenharia de Biossistemas - http://www.leb.esalq.usp.br/leb/automatica/pagina5.html
+```{python}
+##Instalação das Bibliotecas
+!pip install geopandas ##manipular geodados
+!pip install earthengine-api ##acesso a biblioteca google earth engine
+!pip install geobr #acesso bases cartográficas do Brasil
+!pip install ipygee # para google earth engine
+!pip install numpy #dados matriciais (regressão linear)
+!pip install matplotlib.pyplot ##visualização e gráficos
+!pip install pandas ##dataframe
+!pip install folium ##mapas interativos
+!pip install json ##formato de intercambio de dados leves inspirado na sintaxe javascr
+!pip install ee ##biblioteca google earth engine
+!pip install seaborn
+!pip install altair
+!pip install scipy 
+from IPython.display import clear_output # Erase the outputs from console!!!
+clear_output()
+```
+```{python}
+# importando bibliotecas
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.optimize import curve_fit
+import io
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import folium
+import geopandas as gpd
+import json
+import geobr
+import seaborn as sns
+import altair as al
+import requests
+```
+
+```{r}
+#importando dados
+library(tidyverse)
+library(rio)
+#Definição do URL completo para a planilha no github, e inclusão
+# do parâmetro que impõe leitura dos dados brutos (?raw=true)
+
+url_1 <- "https://github.com/FlorestaR/dados/blob/main/X_PIRACLIM"
+xls_2 <- "DadosClima_Piracicaba.xlsx"
+prm_3 <- "?raw=true"
+gitFile <- file.path(url_1, xls_2) %>% paste0(prm_3)
+# Faz o download da planilha como uma tibble (dataframe)
+df <- import(file = gitFile) %>% tibble() # importação
+# Renomeia as colunas com o conteúdo da segunda linha df[1,]
+colnames(df) <- df[1,]
+# Deleta a segunda linha
+df <- df[-c(1),]
+# Exibe primeiras linhas do dataframe
+head(df)
+```
+```{r}
+# Cria dataframe com variáveis de interesse
+df <- df %>%
+  select(ANO, MÊS,TMIN, TMAX, TMED, Chuva) %>%
+  drop_na() %>%
+  mutate_if(is.character,as.numeric) %>%
+  filter(ANO>= 1917)
+str(df)
+df
+
+head(df)
+
+```
+
+```{r}
+df2 <- df %>%
+  select(ANO, MÊS,TMIN, TMAX, TMED, Chuva) %>%
+  drop_na() %>%
+  mutate_if(is.character,as.numeric) %>%
+  filter(ANO<= 2021)
+str(df2)
+```
+```{r}
+df3 <- df2 %>%
+  select(ANO, MÊS,TMIN, TMAX, TMED, Chuva) %>%
+  drop_na() %>%
+  mutate_if(is.character,as.numeric) %>%
+  filter(ANO>= 1991)
+str(df3)
+```
+
+```{r}
+library(ggplot2)
+p = ggplot(df3, aes(df3$MÊS, df3$TMED))+
+         geom_point(na.rm = TRUE)+
+         geom_smooth()+
+  facet_wrap(df3$ANO)
+  
+plot(p)
+(echo=FALSE)
+```
+
+
+```{python}
+!pip install openpyxl
+!pip install requests
+
+```
+
+```{python}
+import openpyxl
+import requests
+```
+
+```{python}
+# Definição do URL completo para a planilha no github, e inclusão
+#     do parâmetro que impõe leitura dos dados brutos (?raw=true)
+url_1 = "https://github.com/FlorestaR/dados/blob/main/X_PIRACLIM/"
+xls_2 = "DadosClima_Piracicaba.xlsx"
+prm_3 = "?raw=true"
+gitFile = url_1 + xls_2 + prm_3
+print(gitFile)
+
+# Faz o download da planilha
+rawFile = requests.get(gitFile).content
+
+# Conversão para um pandas dataframe de uma das abas da planilha
+abaData = "ClimaPira"
+df = pd.read_excel(rawFile, sheet_name=abaData, header=1)
+
+# Exibe 3 primeiras linhas do dataframe
+print(df.head(3))
+```
+
+```{python}
+df_mask=df['ANO']<=2021
+df_limpo = df.dropna()[df_mask]
+print(df_limpo)
+```
+```{python}
+#grafico
+
+plt.figure(figsize=(6,3), facecolor='beige')
+sns.lineplot(data=df_limpo, x="MÊS", y="TMED")
+```
+
+```{python}
+# Média/Soma mensal - TEMP e PREC
+TEMPavg = df_limpo.groupby(["MÊS"])[["TMED","TMAX","TMIN"]].mean()
+TEMPavg = TEMPavg.reset_index(drop=False) # Organize the heads
+PRECsum = df_limpo.groupby(["ANO","MÊS"])[["Chuva"]].sum()
+PRECsum = PRECsum.groupby(["MÊS"])[["Chuva"]].mean()
+PRECsum = PRECsum.reset_index(drop=False) # Organize the heads
+TEMPavg
+print(" ")
+PRECsum
+```
+#FAZENDO O CLIMOGRAMA
+```{python}
+data_join = pd.merge(TEMPavg, PRECsum, on='MÊS')
+data_join
+```
+#CRIANDO O GRÁFICO
+```{python}
+import seaborn as sns
+fig, ax = plt.subplots(1,1, figsize=(6, 2), dpi = 300)
+from matplotlib import rc
+rc('mathtext', default = 'regular')
+
+# Vamos criar o gráfico definindo nosso dataframe para o argumento de dados
+g1 = sns.barplot(data=data_join, x='MÊS', y='Chuva', color='b', ax=ax, label='Precipitação')
+ax2 = plt.twinx()
+g2 = sns.lineplot(data=data_join, x='MÊS', y='TMED', color = 'r', ax=ax2, label='Temperatura')
+
+# vamos definir os rótulos
+ax.set_ylabel('Precipitação Mensal (mm)', fontsize=5)
+ax2.set_ylabel('Temperatura (°C)', fontsize=5)
+ax.set_xlabel('Meses', fontsize=5)
+
+# Unindo legendas
+lines, labels = ax.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+ax2.legend(lines + lines2, labels + labels2, loc=3, fontsize=4)
+
+# Rotacionando os dados do eixo X
+g1.set_xticklabels(data_join['MÊS'].tolist(),rotation=0)
+
+# Criando título para nosso gráfico
+ax.set_title('Precipitação Média (mm/mês) e Temperatura Média do Ar (°C) no Município de Piracicaba (2000 - 2021)', fontsize=6)
+
+```
+
+
+
